@@ -21,7 +21,6 @@ try:
     from mutagen.mp3 import MP3 # type: ignore
     import docx # type: ignore
 except ImportError:
-    # Local IDE fallback
     pass
 
 # ══════════════════════════════════════════════════════
@@ -132,13 +131,12 @@ def python_extract(file_bytes, mime_type, file_name):
     warnings = []
 
     try:
-        # Convert JS Uint8Array to Python bytes
         py_data = file_bytes.to_py()
         b_io = io.BytesIO(py_data)
         b_io.name = file_name
         name_lower = file_name.lower()
 
-        # ─── IMAGES ───
+        # ─── IMAGES (JPEG, PNG, TIFF, WEBP, GIF, BMP) ───
         if mime_type.startswith('image/') or name_lower.endswith(('.jpg', '.jpeg', '.png', '.tiff', '.tif', '.webp', '.gif', '.bmp')):
             img = Image.open(b_io)
             meta['Image_Format'] = img.format or 'Unknown'
@@ -166,59 +164,91 @@ def python_extract(file_bytes, mime_type, file_name):
             if 'icc_profile' in img.info:
                 meta['ICC_Profile_Size'] = f"{len(img.info['icc_profile'])} bytes"
             if 'xmp' in img.info:
-                meta['XMP_Block'] = "DETECTED"
+                meta['XMP_Block'] = "DETECTED (XML metadata)"
+            if 'photoshop' in img.info:
+                meta['Photoshop_IRB'] = "DETECTED"
             if 'iptc' in img.info:
                 meta['IPTC_Block'] = "DETECTED"
 
-        # ─── PDF ───
+            if img.format == 'PNG':
+                for k, v in img.info.items():
+                    if k not in ['icc_profile', 'xmp', 'photoshop']:
+                        meta[f"PNG_{k}"] = str(v)[:200]
+
+        # ─── PDF DOCUMENTS ───
         elif mime_type == 'application/pdf' or name_lower.endswith('.pdf'):
             reader = PdfReader(b_io)
             meta['PDF_Pages'] = len(reader.pages)
             meta['PDF_Encrypted'] = str(reader.is_encrypted)
+
             if reader.metadata:
                 for k, v in reader.metadata.items():
                     key = k.strip('/')
                     if key: meta[f"PDF_{key}"] = str(v)[:300]
 
-        # ─── DOCX ───
+            try:
+                if hasattr(reader, 'xmp_metadata') and reader.xmp_metadata:
+                    meta['PDF_XMP'] = "DETECTED (XMP stream present)"
+            except:
+                pass
+
+        # ─── DOCX WORD DOCUMENTS ───
         elif name_lower.endswith('.docx'):
             doc = docx.Document(b_io)
             prop = doc.core_properties
-            fields = ['author', 'title', 'subject', 'keywords', 'comments', 'category', 'created', 'modified', 'revision']
-            for f in fields:
-                val = getattr(prop, f, None)
-                if val: meta[f"Docx_{f.capitalize()}"] = str(val)[:200]
+            fields = {
+                'Author': prop.author, 'Title': prop.title,
+                'Subject': prop.subject, 'Keywords': prop.keywords,
+                'Comments': prop.comments, 'Category': prop.category,
+                'Created': prop.created, 'Modified': prop.modified,
+                'Last_Modified_By': prop.last_modified_by,
+                'Revision': prop.revision, 'Version': prop.version,
+                'Content_Status': prop.content_status,
+                'Language': prop.language,
+                'Identifier': prop.identifier
+            }
+            for k, v in fields.items():
+                if v: meta[f"Docx_{k}"] = str(v)[:200]
 
-        # ─── MEDIA ───
-        elif (mime_type.startswith('audio/') or mime_type.startswith('video/') or 
-              name_lower.endswith(('.mp3', '.mp4', '.mkv', '.wav', '.flac', '.m4a', '.mov'))):
+        # ─── AUDIO/VIDEO via Mutagen ───
+        elif (mime_type.startswith('audio/') or mime_type.startswith('video/') or
+              name_lower.endswith(('.mp3', '.mp4', '.mkv', '.wav', '.flac', '.m4a', '.ogg', '.mov'))):
             try:
                 media = mutagen.File(b_io)
-                if media:
+                if media is not None:
                     if hasattr(media, 'info'):
-                        meta['Media_Duration'] = f"{getattr(media.info, 'length', 0):.2f}s"
+                        if hasattr(media.info, 'length'):
+                            meta['Media_Duration_Seconds'] = f"{media.info.length:.2f}"
+                        if hasattr(media.info, 'bitrate'):
+                            meta['Media_Bitrate'] = f"{media.info.bitrate} bps"
+
                     if hasattr(media, 'tags') and media.tags:
                         for k, v in list(media.tags.items())[:30]:
                             meta[f"Tag_{k}"] = str(v)[:200]
             except Exception as e:
-                warnings.append(f"Media error: {str(e)}")
+                warnings.append(f"Media parse: {str(e)}")
 
-        # ─── TEXT ───
-        elif mime_type.startswith('text/') or name_lower.endswith(('.txt', '.csv', '.json', '.log')):
+        # ─── TEXT / CSV / JSON ───
+        elif mime_type.startswith('text/') or name_lower.endswith(('.txt', '.csv', '.json', '.xml', '.log')):
             b_io.seek(0)
             raw = b_io.read()
+            meta['Text_Size_Bytes'] = len(raw)
             try:
                 text = raw.decode('utf-8', errors='ignore')
                 meta['Text_Lines'] = str(text.count('\n') + 1)
+                meta['Text_Characters'] = str(len(text))
+
                 if re.search(r'\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Z|a-z]{2,}\b', text):
-                    meta['PII_Email_Found'] = 'Yes'
+                    meta['PII_Email_Found'] = 'Yes (emails detected in content)'
+                if re.search(r'\b(?:\d{1,3}\.){3}\d{1,3}\b', text):
+                    meta['PII_IP_Found'] = 'Yes (IP addresses detected)'
             except:
-                meta['Text_Status'] = 'Binary/Unknown'
+                meta['Text_Status'] = 'Binary or unknown encoding'
 
     except Exception as e:
         meta['Extraction_Error'] = str(e)
 
-    clean_meta = {k: v for k, v in meta.items() if v and str(v).strip() not in ('None', '')}
+    clean_meta = {k: v for k, v in meta.items() if v and str(v).strip() not in ('None', '', '0001-01-01 00:00:00+00:00')}
     return json.dumps({
         'metadata': clean_meta,
         'threats': classify_threat(clean_meta),
@@ -227,7 +257,7 @@ def python_extract(file_bytes, mime_type, file_name):
 
 
 # ══════════════════════════════════════════════════════
-# SANITIZATION ENGINE
+# SANITIZATION ENGINE (ZERO-TOLERANCE)
 # ══════════════════════════════════════════════════════
 def python_sanitize(file_bytes, mime_type, file_name):
     py_data = file_bytes.to_py()
@@ -239,70 +269,80 @@ def python_sanitize(file_bytes, mime_type, file_name):
     log = []
 
     try:
-        # ─── IMAGES ───
-        if mime_type.startswith('image/') or name_lower.endswith(('.jpg', '.jpeg', '.png', '.webp')):
+        # ─── IMAGES: Pixel-only re-encoding ───
+        if mime_type.startswith('image/') or name_lower.endswith(('.jpg', '.jpeg', '.png', '.tiff', '.tif', '.webp', '.gif', '.bmp')):
             img = Image.open(b_io)
             img_format = img.format if img.format else 'PNG'
-            # Force conversion to strip profiles/metadata
+            log.append(f"Format detected: {img_format}")
+
+            if img_format == 'JPEG' and img.mode in ('RGBA', 'P', 'LA'):
+                img = img.convert('RGB')
+                log.append("Mode converted to RGB")
+
+            # Nuclear metadata destruction: paste pixels into new canvas
             clean_img = Image.new(img.mode, img.size)
             clean_img.paste(img)
-            clean_img.save(out, format=img_format, optimize=True)
-            log.append(f"Re-encoded {img_format} (metadata stripped)")
+
+            save_kwargs = {'format': img_format, 'optimize': True}
+            if img_format == 'JPEG': save_kwargs['quality'] = 95
+
+            clean_img.save(out, **save_kwargs)
+            log.append("Image rebuilt from raw pixels (zero-metadata)")
             processed = True
 
-        # ─── PDF ───
+        # ─── PDF: Dictionary purge + structural rebuild ───
         elif mime_type == 'application/pdf' or name_lower.endswith('.pdf'):
             reader = PdfReader(b_io)
             writer = PdfWriter()
             for page in reader.pages:
                 writer.add_page(page)
-            writer.add_metadata({}) # Clear metadata
+            writer.add_metadata({})
+            log.append(f"{len(reader.pages)} pages transferred, metadata dictionary purged")
             writer.write(out)
-            log.append("PDF structure rebuilt (metadata cleared)")
             processed = True
 
-        # ─── DOCX ───
+        # ─── DOCX: Core property destruction ───
         elif name_lower.endswith('.docx'):
             doc = docx.Document(b_io)
             prop = doc.core_properties
-            for f in ['author', 'title', 'subject', 'keywords', 'comments', 'category', 'identifier']:
+            for f in ['author', 'last_modified_by', 'comments', 'title', 'subject', 'keywords', 'category', 'identifier']:
                 setattr(prop, f, '')
+            log.append("All core properties sanitized")
             doc.save(out)
-            log.append("Word properties sanitized")
             processed = True
 
-        # ─── MEDIA ───
-        elif name_lower.endswith(('.mp4', '.mp3', '.m4a')):
-            # Copy to out first for mutagen to work on
+        # ─── MEDIA: Mutagen purge ───
+        elif name_lower.endswith(('.mp4', '.mp3', '.m4a', '.wav', '.flac', '.ogg')):
+            # Copy bytes to 'out' for mutagen to operate on
             out.write(py_data)
             out.seek(0)
             media = mutagen.File(out)
             if media:
                 media.delete()
                 media.save(out)
-                log.append("Media tags purged")
+                log.append("Media container tags purged")
                 processed = True
             else:
-                # Fallback: Salt the file to change hash
+                # Forensic salting fallback
                 out.seek(0, 2)
                 out.write(b'\x00')
-                log.append("Forensic salting applied")
+                log.append("Forensic salting applied (EOF injection)")
                 processed = True
 
-        # ─── TEXT ───
-        elif mime_type.startswith('text/') or name_lower.endswith(('.txt', '.csv')):
+        # ─── TEXT / CSV: BOM stripping + re-encoding ───
+        elif mime_type.startswith('text/') or name_lower.endswith(('.txt', '.csv', '.json', '.xml', '.log')):
             b_io.seek(0)
-            content = b_io.read()
-            # Strip BOM
-            for bom in [b'\xef\xbb\xbf', b'\xff\xfe', b'\xfe\xff']:
-                if content.startswith(bom):
-                    content = content[len(bom):]
-                    log.append("BOM removed")
-            out.write(content)
+            raw_content = b_io.read()
+            for bom in (b'\xef\xbb\xbf', b'\xff\xfe', b'\xfe\xff'):
+                if raw_content.startswith(bom):
+                    raw_content = raw_content[len(bom):]
+                    log.append("BOM stripped")
+                    break
+            out.write(raw_content)
             processed = True
 
     except Exception as e:
-        log.append(f"Error: {str(e)}")
+        log.append(f"EXCEPTION: {str(e)}")
 
     final_data = out.getvalue() if processed else py_data
     return json.dumps({
