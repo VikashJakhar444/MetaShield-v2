@@ -8,14 +8,21 @@ Author: Vikash Jakhar
 import io
 import json
 import re
-import js
-from PIL import Image, ExifTags
-from pypdf import PdfReader, PdfWriter
-import mutagen
-from mutagen.mp4 import MP4
-from mutagen.id3 import ID3, ID3NoHeaderError
-from mutagen.mp3 import MP3
-import docx
+
+# These modules are provided by the Pyodide runtime in the browser.
+# We wrap them to suppress local IDE warnings.
+try:
+    import js # type: ignore
+    from PIL import Image, ExifTags # type: ignore
+    from pypdf import PdfReader, PdfWriter # type: ignore
+    import mutagen # type: ignore
+    from mutagen.mp4 import MP4 # type: ignore
+    from mutagen.id3 import ID3, ID3NoHeaderError # type: ignore
+    from mutagen.mp3 import MP3 # type: ignore
+    import docx # type: ignore
+except ImportError:
+    # Local IDE fallback
+    pass
 
 # ══════════════════════════════════════════════════════
 # SENSITIVE KEY DETECTION (for threat analysis)
