@@ -689,7 +689,7 @@ Copy code
     <!-- ==================== FOOTER ==================== -->
     <footer class="sys-footer">
         <div class="footer-content">
-            <p>Engineered by <strong>Vikash Jakhar</strong> · Zero-Trust Python Architecture · MIT License</p>
+            <p>Engineered by <strong>Vikash Jakhar</strong> · Zero-Trust Python Architecture · GNU GPL v3</p>
             <p class="footer-sub">MetaShield Enterprise v2.0 — Forensic tools for the digital age.</p>
         </div>
     </footer>
@@ -1680,7 +1680,7 @@ Copy code
  *  Architecture: Dual-Engine (Python-WASM + JavaScript Fallback)
  *  Security Model: Zero-Trust, Zero-Silent-Failure
  *  Author: Enterprise Team (led by Vikash Jakhar)
- *  License: MIT
+ *  License: GNU GPL v3
  * ═══════════════════════════════════════════════════════════════
  */
 
@@ -3396,7 +3396,7 @@ const hash = await sha256(fileOrBlob)
 Credits
 Lead Developer: Vikash Jakhar
 Framework: MetaShield Enterprise Team
-License: MIT
+License: GNU GPL v3
 Version: 2.0 (Enterprise)
 "When privacy matters, metadata matters more."
 

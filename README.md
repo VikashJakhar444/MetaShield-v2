@@ -2,7 +2,7 @@
 
 > **A zero-trust, browser-native forensic metadata sanitization engine.**
 
-![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)
+![License: GPL v3](https://img.shields.io/badge/License-GPLv3-blue.svg)
 ![Runtime: Python--WASM](https://img.shields.io/badge/Runtime-Python--WASM-gold.svg)
 ![Dependencies: Zero](https://img.shields.io/badge/Dependencies-Zero--External-green.svg)
 ![Privacy: Client--Side Only](https://img.shields.io/badge/Privacy-Client--Side%20Only-blueviolet.svg)
@@ -77,4 +77,4 @@ Every action taken by the engine is logged with millisecond precision. Users can
 ---
 
 **Engineered by [Vikash Jakhar](https://github.com/VikashJakhar444)**  
-*Distributed under the MIT License. Built for privacy professionals and forensic analysts.*
+*Distributed under the GNU General Public License v3.0. Built for privacy professionals and forensic analysts.*

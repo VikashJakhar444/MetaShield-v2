@@ -5,7 +5,7 @@
  *  Architecture: Dual-Engine (Python-WASM + JavaScript Fallback)
  *  Security Model: Zero-Trust, Zero-Silent-Failure
  *  Author: Enterprise Team (led by Vikash Jakhar)
- *  License: MIT
+ *  License: GNU GPL v3
  * ═══════════════════════════════════════════════════════════════
  */
 
